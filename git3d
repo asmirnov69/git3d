@@ -3,6 +3,7 @@
 import argparse
 import sys, os.path, shutil, glob
 import subprocess, shlex
+import getpass
 
 """
 session example:
@@ -48,7 +49,9 @@ def cleanup_tempdir():
         os.makedirs(temp_dir_root)
         
 def load_tree(tree_id, tree_dirname_prefix, dry_run):
-    temp_dir_root = "/var/tmp/git3w-trees"
+    temp_dir_root = os.path.join("/var/tmp/git3w-trees", getpass.getuser())
+    if not os.path.exists(temp_dir_root):
+        os.makedirs(temp_dir_root)
     tree_dirname = tree_dirname_prefix + "--" + tree_id
     tree_dir = os.path.join(temp_dir_root, tree_dirname)
     cmd = f"git archive --format=tar --prefix={tree_dirname}/ {tree_id} | (cd {temp_dir_root} && tar xf -)"
@@ -61,7 +64,7 @@ def load_tree(tree_id, tree_dirname_prefix, dry_run):
     return tree_dir
 
 def list_temp_dir():
-    temp_dir_root = "/var/tmp/git3w-trees"
+    temp_dir_root = os.path.join("/var/tmp/git3w-trees", getpass.getuser())
     files = glob.glob(os.path.join(temp_dir_root, '*'))
     ret_d = {}
     for f in files:
@@ -87,8 +90,12 @@ def do_checkout_trees(source_tree_id, dry_run):
 
     if not dry_run:
         cleanup_tempdir()
-        
-    target_tree_id = get_tree_id("HEAD")    
+
+    source_tree_id = get_tree_id(source_tree_id)
+    target_tree_id = get_tree_id("HEAD")
+    if source_tree_id == target_tree_id:
+        raise Exception(f"source and target are the same commit {source_tree_id}")
+    
     base_tree_id = get_common_ancentor_tree_id(target_tree_id, source_tree_id)
     if base_tree_id is None:
         raise Exception("can't find base tree for %s and %s" % (target_tree_id, source_tree_id))
