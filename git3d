@@ -61,7 +61,6 @@ def load_tree(tree_id, tree_dirname_prefix, dry_run):
         print(cmd)
     else:
         ret = subprocess.check_output(cmd, shell = True)
-        print(ret)
     return tree_dir
 
 def list_temp_dir():
@@ -164,9 +163,7 @@ if __name__ == "__main__":
         args = vars(args)
         do_show_trees(args['tree-id'], args['long'])
     elif args.action == 'checkout-trees':
-        print("action: checkout-trees")
         args = vars(args)
-        print(args)
         do_checkout_trees(args['tree-id'], args['dry_run'])
     elif args.action == 'ls':
         #print("action: ls")
@@ -177,6 +174,3 @@ if __name__ == "__main__":
         args = vars(args)
         print(args)
         do_commit_merged_tree(args['message'], args['dry_run'])
-        
-
-
