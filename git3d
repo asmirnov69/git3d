@@ -123,7 +123,7 @@ def do_commit_merged_tree(message, dry_run):
         subprocess.check_output(f"git add -u", shell = True)
         ret = subprocess.check_output(f"git write-tree", shell = True)
         new_tree_hash = ret.decode('ascii').strip()
-        ret = subprocess.check_output(f"git commit-tree -m '{message}' -p {source_tree_id} -p {target_tree_id} {new_tree_hash}", shell = True)
+        ret = subprocess.check_output(f"git commit-tree -m '{message}' -p {target_tree_id} -p {source_tree_id} {new_tree_hash}", shell = True)
         new_commit_hash = ret.decode('ascii').strip()
         subprocess.check_output(f"git reset --soft {new_commit_hash}", shell = True)
     else:
