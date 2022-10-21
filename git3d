@@ -72,6 +72,8 @@ def list_temp_dir():
             ret_d["SOURCE"] = [f, os.path.basename(f).replace("SOURCE--", "")]
         elif f.find("BASE--") != -1:
             ret_d["BASE"] = [f, os.path.basename(f).replace("BASE--", "")]
+        elif f.find("TARGET--") != -1:
+            ret_d["TARGET"] = [f, os.path.basename(f).replace("TARGET--", "")]
     return ret_d
     
 def do_show_trees(source_tree_id, long_form):
@@ -80,9 +82,9 @@ def do_show_trees(source_tree_id, long_form):
     if base_tree_id is None:
         raise Exception("can't find base tree for %s and %s" % (target_tree_id, source_tree_id))
 
-    print("base_tree_id:\t", get_tree_id_pretty_print(base_tree_id, long_form))
-    print("source_tree_id:\t", get_tree_id_pretty_print(source_tree_id, long_form))
-    print("target_tree_id:\t", get_tree_id_pretty_print(target_tree_id, long_form))
+    print("===>>> base_tree_id:\t", get_tree_id_pretty_print(base_tree_id, long_form))
+    print("===>>> source_tree_id:\t", get_tree_id_pretty_print(source_tree_id, long_form))
+    print("===>>> target_tree_id:\t", get_tree_id_pretty_print(target_tree_id, long_form))
 
 def do_checkout_trees(source_tree_id, dry_run):
     if not check_current_tree():
@@ -102,8 +104,10 @@ def do_checkout_trees(source_tree_id, dry_run):
 
     base_tree = load_tree(base_tree_id, "BASE", dry_run)
     source_tree = load_tree(source_tree_id, "SOURCE", dry_run)
+    target_tree = load_tree(target_tree_id, "TARGET", dry_run)
     print("base tree:", base_tree)
     print("source tree:", source_tree)
+    print("target tree:", target_tree)
 
 def do_commit_merged_tree(message, dry_run):
     d = list_temp_dir()
@@ -145,11 +149,11 @@ if __name__ == "__main__":
 
     action_show_trees = subparser.add_parser('show-trees')
     action_show_trees.add_argument('--long', action ='store_true', required =False)
-    action_show_trees.add_argument('tree-id')
+    action_show_trees.add_argument('source-tree-id')
     
     action_checkout_trees = subparser.add_parser('checkout-trees')
     action_checkout_trees.add_argument('--dry-run', action = 'store_true', required = False)
-    action_checkout_trees.add_argument('tree-id')
+    action_checkout_trees.add_argument('source-tree-id')
 
     action_ls = subparser.add_parser('ls')
 
@@ -161,15 +165,16 @@ if __name__ == "__main__":
 
     if args.action == 'show-trees':
         args = vars(args)
-        do_show_trees(args['tree-id'], args['long'])
+        do_show_trees(args['source-tree-id'], args['long'])
     elif args.action == 'checkout-trees':
         args = vars(args)
-        do_checkout_trees(args['tree-id'], args['dry_run'])
+        source_tree_id = args['source-tree-id']
+        do_checkout_trees(source_tree_id, args['dry_run'])
     elif args.action == 'ls':
         #print("action: ls")
         args = vars(args)
         d = list_temp_dir()
-        print(" ".join([d["BASE"][0], d["SOURCE"][0], "."]))
+        print(" ".join([d["BASE"][0], d["SOURCE"][0], d["TARGET"][0]]))
     elif args.action == 'commit-merged-tree':
         args = vars(args)
         print(args)
