@@ -179,3 +179,6 @@ if __name__ == "__main__":
         args = vars(args)
         print(args)
         do_commit_merged_tree(args['message'], args['dry_run'])
+    elif args.action is None:
+        print("use --help to see how to use git3d")
+        sys.exit(128)
