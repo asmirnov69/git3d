@@ -16,7 +16,8 @@ git rev-parse --abbrev-ref master@{upstream} # tracking branch of master branch
 """
 
 if __name__ == "__main__":
-   g3d_config_fn = "./test.g3d.json"
+   g3d_config_fn = sys.argv[1]
+   
    with open(g3d_config_fn, 'r') as f:
       repos = json.load(f)
 

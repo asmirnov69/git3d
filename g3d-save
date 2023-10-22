@@ -26,8 +26,7 @@ class RepoState:
       self.commit = None
       self.is_modified = None
       self.is_detached_head = None
-      self.tracking_branch = None
-      self.tracking_branch_commit = None
+      self.has_tracking_branch = None
       self.repo_log = None
       
    def load_state(self, w_dir):
@@ -35,8 +34,6 @@ class RepoState:
       self.branch = getoutput(f"git branch --show-current", w_dir)         
       self.commit = getoutput(f"git show -s --format='%H'", w_dir)
       self.url = getoutput(f"git remote get-url origin", w_dir)
-      self.tracking_branch = getoutput(f"git branch -r --contains HEAD | grep -v HEAD", w_dir).strip() if self.branch else None
-      self.tracking_branch_commit = getoutput(f"git show -s --no-color --pretty='%H' {self.tracking_branch}", w_dir)
       self.repo_log = getoutput("git log -1 --pretty='%h %d: %s, %ad'", w_dir)
       
       res = getoutput("git status --porcelain", w_dir)
@@ -53,9 +50,15 @@ class RepoState:
          self.is_detached_head = True
       else:
          self.is_detached_head = False
+
+      res = getoutput(f"git branch -r --contains HEAD | grep -v HEAD", w_dir).strip() if self.branch else None
+      if res is None:
+         self.has_tracking_branch = False
+      else:
+         self.has_tracking_branch = True
          
    def show(self):
-      print(f"{self.dir_name}: {self.is_detached_head} {self.is_modified} {self.branch},{self.commit} {self.tracking_branch},{self.tracking_branch_commit} {self.url}")
+      print(f"{self.dir_name}: {self.is_detached_head} {self.is_modified} {self.branch},{self.commit} {self.has_tracking_branch} {self.url}")
 
 def dump_repos_state():
    dirs = os.listdir(os.getcwd())
@@ -70,7 +73,7 @@ def dump_repos_state():
                             
 
 if __name__ == "__main__":
-   g3d_config_fn = "./test.g3d.json"
+   g3d_config_fn = sys.argv[1]
    repos = dump_repos_state()
    if 0:
       for repo in repos:
@@ -82,11 +85,11 @@ if __name__ == "__main__":
       if repo.is_modified:
          local_mods = True
          print("locally modified repo ", repo.dir_name)
-      if repo.tracking_branch is None:
+      if repo.has_tracking_branch == False:
          no_tracking_branch = True
          print("no tracking branch in repo ", repo.dir_name)
          
-   if local_mods or no_tracking_branch:
+   if local_mods:
       print("giving up, will exit")
       sys.exit(12)
       
