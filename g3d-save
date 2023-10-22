@@ -26,7 +26,8 @@ class RepoState:
       self.commit = None
       self.is_modified = None
       self.is_detached_head = None
-      self.has_tracking_branch = None
+      self.does_branch_have_upstream_tracking_branch = None
+      self.does_commit_exists_on_remote = None
       self.repo_log = None
       
    def load_state(self, w_dir):
@@ -51,15 +52,18 @@ class RepoState:
       else:
          self.is_detached_head = False
 
-      res = getoutput(f"git branch -r --contains HEAD | grep -v HEAD", w_dir).strip() if self.branch else None
+      res = getoutput("git rev-parse --symbolic-full-name --abbrev-ref @{u}", w_dir)
       if res is None:
-         self.has_tracking_branch = False
+         self.does_branch_have_upstream_tracking_branch = False
       else:
-         self.has_tracking_branch = True
-         
-   def show(self):
-      print(f"{self.dir_name}: {self.is_detached_head} {self.is_modified} {self.branch},{self.commit} {self.has_tracking_branch} {self.url}")
+         self.does_branch_have_upstream_tracking_branch = True
 
+      res = getoutput(f"git branch -r --contains {self.commit}", w_dir)
+      if res is None:
+         self.does_commit_exists_on_remote = False
+      else:
+         self.does_commit_exists_on_remote = True
+         
 def dump_repos_state():
    dirs = os.listdir(os.getcwd())
    repo_states = []
@@ -75,9 +79,6 @@ def dump_repos_state():
 if __name__ == "__main__":
    g3d_config_fn = sys.argv[1]
    repos = dump_repos_state()
-   if 0:
-      for repo in repos:
-         repo.show()
 
    local_mods = False
    no_tracking_branch = False
@@ -85,11 +86,11 @@ if __name__ == "__main__":
       if repo.is_modified:
          local_mods = True
          print("locally modified repo ", repo.dir_name)
-      if repo.has_tracking_branch == False:
+      if repo.does_branch_have_upstream_tracking_branch == False:
          no_tracking_branch = True
-         print("no tracking branch in repo ", repo.dir_name)
+         print(f"no tracking branch for current branch in repo {repo.dir_name}")
          
-   if local_mods:
+   if local_mods or no_tracking_branch:
       print("giving up, will exit")
       sys.exit(12)
       
