@@ -20,11 +20,19 @@ if __name__ == "__main__":
    with open(g3d_config_fn, 'r') as f:
       repos = json.load(f)
 
+   print("clean up")
    for repo in repos:
-      #print(repo)
-      #cmd = f"git clone {repo['url']} -b {repo['branch']} {repo['dir_name']}"
-      cmd = f"git clone {repo['url']} {repo['dir_name']}"
+      print(repo)
+      cmd = f"rm -rf {repo['dir_name']}"
       print(cmd)
       os.system(cmd)
-      
+
+   print("cloning")
+   for repo in repos:
+      if repo.get('branch'):
+         cmd = f"git clone {repo['url']} -b {repo['branch']} {repo['dir_name']}"
+      else:
+         cmd = f"git clone {repo['url']} {repo['dir_name']} && (cd {repo['dir_name']}; git checkout {repo['commit']})"
+      print(cmd)
+      os.system(cmd)
       
