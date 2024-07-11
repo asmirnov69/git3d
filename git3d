@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 
+#import ipdb
 import argparse
-import sys, os.path, shutil, glob
+import sys, os.path, shutil, glob, pickle
 import subprocess, shlex
 import getpass
 
@@ -16,16 +17,17 @@ git commit-tree -m 'test merge' -p b5592e193af10b246a5e2de25c9777eb746c80df -p 9
 git reset --soft 1de0018070957e4b7ae2dc3e74ad5e44d809f1a0 # head moves to new commit
 """
 
+temp_dir__ = None
+top_dir__ = None
 
-"""
-returns True if:
- - cwd is git tracked (git ls-tree HEAD)
- - no submodules
- - no local modifications
- - no merged (git ls-files --unmerged)
-"""
-def can_download_trees():
-    return True
+def get_working_dirs():
+    global temp_dir__
+    global top_dir__
+    if temp_dir__ == None:
+        cmd = "git rev-parse --show-toplevel"
+        top_dir__ = subprocess.check_output(shlex.split(cmd)).decode('ascii').strip()
+        temp_dir__ = os.path.join(top_dir__, ".git/git3d")
+    return temp_dir__, top_dir__
 
 def get_tree_id(tree_id):
     cmd = f"git rev-parse {tree_id}"
@@ -42,41 +44,21 @@ def get_common_ancentor_tree_id(target_tree_id, source_tree_id):
     cmd = f"git merge-base {target_tree_id} {source_tree_id}"
     ret = subprocess.check_output(shlex.split(cmd))
     return ret.decode('ascii').strip()
-
-def cleanup_tempdir():
-    temp_dir_root = "/var/tmp/git3w-trees"
-    if os.path.exists(temp_dir_root):
-        shutil.rmtree(temp_dir_root)
-        os.makedirs(temp_dir_root)
         
-def load_tree(tree_id, tree_dirname_prefix, dry_run):
-    temp_dir_root = os.path.join("/var/tmp/git3w-trees", getpass.getuser())
-    if not os.path.exists(temp_dir_root):
-        os.makedirs(temp_dir_root)
-    tree_dirname = tree_dirname_prefix + "--" + tree_id
+def load_tree(temp_dir_root, tree_id, tree_prefix):    
+    tree_dirname = tree_prefix + "--" + tree_id
     tree_dir = os.path.join(temp_dir_root, tree_dirname)
     cmd = f"git archive --format=tar --prefix={tree_dirname}/ {tree_id} | (cd {temp_dir_root} && tar xf -)"
-
-    if dry_run:
-        print(cmd)
-    else:
-        ret = subprocess.check_output(cmd, shell = True)
+    ret = subprocess.check_output(cmd, shell = True)
     return tree_dir
 
 def list_temp_dir():
-    temp_dir_root = os.path.join("/var/tmp/git3w-trees", getpass.getuser())
-    files = glob.glob(os.path.join(temp_dir_root, '*'))
-    ret_d = {}
-    for f in files:
-        if f.find("SOURCE--") != -1:
-            ret_d["SOURCE"] = [f, os.path.basename(f).replace("SOURCE--", "")]
-        elif f.find("BASE--") != -1:
-            ret_d["BASE"] = [f, os.path.basename(f).replace("BASE--", "")]
-        elif f.find("TARGET--") != -1:
-            ret_d["TARGET"] = [f, os.path.basename(f).replace("TARGET--", "")]
-    return ret_d
+    temp_dir_root, top_dir = get_working_dirs()
+    with open(os.path.join(temp_dir_root, "manifest.pkl"), "rb") as fd:
+        trees = pickle.load(fd)
+        return trees
     
-def do_show_trees(source_tree_id, long_form):
+def do_find_trees(source_tree_id, long_form):
     target_tree_id = get_tree_id("HEAD")
     base_tree_id = get_common_ancentor_tree_id(target_tree_id, source_tree_id)
     if base_tree_id is None:
@@ -86,13 +68,7 @@ def do_show_trees(source_tree_id, long_form):
     print("===>>> source_tree_id:\n", get_tree_id_pretty_print(source_tree_id, long_form), "\n")
     print("===>>> target_tree_id:\n", get_tree_id_pretty_print(target_tree_id, long_form), "\n")
 
-def do_download_trees(source_tree_id, dry_run):
-    if not can_download_trees():
-        raise Exception("current tree check failed")
-
-    if not dry_run:
-        cleanup_tempdir()
-
+def do_checkout_trees(source_tree_id):
     source_tree_id = get_tree_id(source_tree_id)
     target_tree_id = get_tree_id("HEAD")
     if source_tree_id == target_tree_id:
@@ -102,18 +78,28 @@ def do_download_trees(source_tree_id, dry_run):
     if base_tree_id is None:
         raise Exception("can't find base tree for %s and %s" % (target_tree_id, source_tree_id))
 
-    base_tree = load_tree(base_tree_id, "BASE", dry_run)
-    source_tree = load_tree(source_tree_id, "SOURCE", dry_run)
-    target_tree = load_tree(target_tree_id, "TARGET", dry_run)
-    print("base tree:", base_tree)
-    print("source tree:", source_tree)
-    print("target tree:", target_tree)
+    temp_dir_root, top_dir = get_working_dirs()
+    print("temp_dir_root:", temp_dir_root)
+    #ipdb.set_trace()
+    if not os.path.exists(temp_dir_root):
+        os.makedirs(temp_dir_root)
+    else:
+        raise Exception("base-source tree dir already exists:", temp_dir_root)
 
-def do_commit_merged_tree(message, dry_run):
+    trees = {}    
+    trees['BASE'] = (base_tree_id, load_tree(temp_dir_root, base_tree_id, 'BASE').replace(top_dir + '/', ""))
+    trees['SOURCE'] = (source_tree_id, load_tree(temp_dir_root, source_tree_id, 'SOURCE').replace(top_dir + '/', ""))
+    trees['TARGET'] = ("", ".")
+    with open(os.path.join(temp_dir_root, "manifest.pkl"), "wb") as fd:
+        pickle.dump(trees, fd)       
+        for k in ['BASE', 'SOURCE', 'TARGET']:
+            print(f"{k}: {trees[k]}")
+
+def do_merge_commit(message):
     d = list_temp_dir()
-    base_tree_id = d["BASE"][1]
+    base_tree_id = d["BASE"][0]
     base_tree_id_pp = get_tree_id_pretty_print(base_tree_id)
-    source_tree_id = d["SOURCE"][1]
+    source_tree_id = d["SOURCE"][0]
     source_tree_id_pp = get_tree_id_pretty_print(source_tree_id)
     target_tree_id = get_tree_id('HEAD')
     target_tree_id_pp = get_tree_id_pretty_print(target_tree_id)
@@ -123,62 +109,62 @@ def do_commit_merged_tree(message, dry_run):
     message += f"SOURCE:\t{source_tree_id_pp}\n"
     message += f"BASE:\t{base_tree_id_pp}\n"
 
-    if not dry_run:
-        subprocess.check_output(f"git add -u", shell = True)
-        ret = subprocess.check_output(f"git write-tree", shell = True)
-        new_tree_hash = ret.decode('ascii').strip()
-        ret = subprocess.check_output(f"git commit-tree -m '{message}' -p {target_tree_id} -p {source_tree_id} {new_tree_hash}", shell = True)
-        new_commit_hash = ret.decode('ascii').strip()
-        subprocess.check_output(f"git reset --soft {new_commit_hash}", shell = True)
-    else:
-        print(message)
+    subprocess.check_output(f"git add -u", shell = True)
+    ret = subprocess.check_output(f"git write-tree", shell = True)
+    new_tree_hash = ret.decode('ascii').strip()
+    ret = subprocess.check_output(f"git commit-tree -m '{message}' -p {target_tree_id} -p {source_tree_id} {new_tree_hash}", shell = True)
+    new_commit_hash = ret.decode('ascii').strip()
+    subprocess.check_output(f"git reset --soft {new_commit_hash}", shell = True)
     
 """
 git3d --help
-git3d show-trees source-tree-id
-git3d download-trees [--dry-run] source-tree-id
-git3d ls-trees
-git3d commit-merged-tree [--dry-run] -m <text>
-git3d recommit-merged-tree [--dry-run] [-m <text>]
-git3d cleanup [--dry-run]
+git3d show-trees <commit-or-branch>
+git3d checkout-trees <commit-or-branch>
+git3d trees
+git3d merge-commit -m <text>
 """
 if __name__ == "__main__":
     # useful argparse text: https://towardsdatascience.com/a-simple-guide-to-command-line-arguments-with-argparse-6824c30ab1c3    
     parser = argparse.ArgumentParser(description = "should help to do git three way diff and merge")
     subparser = parser.add_subparsers(dest = 'action')
 
-    action_show_trees = subparser.add_parser('show-trees')
-    action_show_trees.add_argument('-l', '--long', action ='store_true', required = False, help = "long format resembling git log output")
-    action_show_trees.add_argument('source-tree-id', help = 'branch name, tag or commit id')
+    action_find_trees = subparser.add_parser('find-trees')
+    action_find_trees.add_argument('-l', '--long', action ='store_true', required = False, help = "long format resembling git log output")
+    action_find_trees.add_argument('source-tree-id', help = 'branch name, tag or commit id')
     
-    action_download_trees = subparser.add_parser('download-trees')
-    action_download_trees.add_argument('--dry-run', action = 'store_true', required = False)
-    action_download_trees.add_argument('source-tree-id')
+    action_checkout_trees = subparser.add_parser('checkout-trees')
+    action_checkout_trees.add_argument('source-tree-id')
 
-    action_ls_trees = subparser.add_parser('ls-trees')
-
-    action_commit_merged_tree = subparser.add_parser('commit-merged-tree')
-    action_commit_merged_tree.add_argument('--dry-run', action = 'store_true', required = False)
+    action_trees = subparser.add_parser('trees')
+    action_trees.add_argument('--long', '-l', action = 'store_true', required = False, help = "long description of tree")
+    
+    action_commit_merged_tree = subparser.add_parser('merge-commit')
     action_commit_merged_tree.add_argument('--message', '-m', type = str, required = True)
     
     args = parser.parse_args()
-
-    if args.action == 'show-trees':
-        args = vars(args)
-        do_show_trees(args['source-tree-id'], args['long'])
-    elif args.action == 'download-trees':
-        args = vars(args)
+    action = args.action
+    args = vars(args)
+    
+    if action == 'find-trees':
+        do_find_trees(args['source-tree-id'], args['long'])
+    elif action == 'checkout-trees':
         source_tree_id = args['source-tree-id']
-        do_download_trees(source_tree_id, args['dry_run'])
-    elif args.action == 'ls-trees':
-        #print("action: ls")
-        args = vars(args)
+        do_checkout_trees(source_tree_id)
+    elif action == 'trees':
+        #ipdb.set_trace()
+        _, top_dir = get_working_dirs()
         d = list_temp_dir()
-        print(" ".join([d["BASE"][0], d["SOURCE"][0], d["TARGET"][0]]))
-    elif args.action == 'commit-merged-tree':
-        args = vars(args)
+        if args['long']:
+            for k in ['BASE', 'SOURCE', 'TARGET']:
+                print("======== ", k)
+                print("path:", d[k][1])
+                print(get_tree_id_pretty_print(d[k][0], long_form = True))
+                print("")
+        else:
+            print(" ".join([os.path.join(top_dir, x) for x in [d["BASE"][1], d["SOURCE"][1], d["TARGET"][1]]]))
+    elif action == 'merge-commit':
         print(args)
-        do_commit_merged_tree(args['message'], args['dry_run'])
-    elif args.action is None:
+        do_merge_commit(args['message'])
+    elif action is None:
         print("use --help to see how to use git3d")
         sys.exit(128)
